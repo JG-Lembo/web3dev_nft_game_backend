@@ -8,7 +8,11 @@ const main = async () => {
               "https://i.pinimg.com/originals/08/ea/0a/08ea0ad8365170b5f3d3d0245c9eae9d.jpg",
           ],
       [100, 50, 200], // HP values
-      [100, 200, 50] // Attack damage values
+      [100, 200, 50],
+      "Mewtwo",
+      "https://i.redd.it/ylhsc8d18ag61.jpg",
+      10000,
+      50
     );
     await gameContract.deployed();
     console.log("Contrato implantado no endereço:", gameContract.address);
