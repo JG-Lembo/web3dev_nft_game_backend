@@ -3,14 +3,14 @@ const main = async () => {
     const gameContract = await gameContractFactory.deploy(
       ["Charizard", "Blastoise", "Venusaur"],
           [
-              "https://i.pinimg.com/originals/bb/06/15/bb06152d6edb8c578216fcdebd21715b.jpg",
-              "https://i.pinimg.com/originals/4e/fb/a2/4efba28478e043be9815d1b2caa5b3bc.jpg",
-              "https://i.pinimg.com/originals/08/ea/0a/08ea0ad8365170b5f3d3d0245c9eae9d.jpg",
+              "QmVfBczCkr4wzb6qivHNHHVFDZR3ZhZnuotR8o4wrJtHFc",
+              "QmdTGXhM7tfPoLzu7YkDTKHaGKh4DxeareA4tYGJmbjA4s",
+              "QmQRGnJNfNV5t3JcutQiYiHqnvRJfPBpmeHEicmN6qGzYV",
           ],
       [100, 50, 200], // HP values
       [100, 200, 50],
       "Mewtwo",
-      "https://i.redd.it/ylhsc8d18ag61.jpg",
+      "QmeKNQS2rcRwa9FiF7F9Go5CqhVfENUfGk6G7Cabpdr9cd",
       10000,
       50
     );
