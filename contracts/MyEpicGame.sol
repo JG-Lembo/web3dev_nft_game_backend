@@ -51,6 +51,9 @@ contract MyEpicGame is ERC721 {
   // depois.
   mapping(address => uint256) public nftHolders;
 
+  event CharacterNFTMinted(address sender, uint256 tokenId, uint256 characterIndex);
+  event AttackComplete(uint newBossHp, uint newPlayerHp);
+
   constructor(
     string[] memory characterNames,
     string[] memory characterImageURIs,
@@ -123,6 +126,8 @@ contract MyEpicGame is ERC721 {
 
     // Incrementa o tokenId para a proxima pessoa que usar.
     _tokenIds.increment();
+
+    emit CharacterNFTMinted(msg.sender, newItemId, _characterIndex);
   }
 
   function tokenURI(uint256 _tokenId) public view override returns (string memory) {
@@ -169,7 +174,7 @@ contract MyEpicGame is ERC721 {
     // Checa que o hp do boss é maior que 0.
     require (
         bigBoss.hp > 0,
-        "Erro: Boss deve ter HP para atacar o boss."
+        "Erro: Boss deve ter HP para atacar."
     );
 
     // Permite que o jogador ataque o boss.
@@ -179,7 +184,6 @@ contract MyEpicGame is ERC721 {
         bigBoss.hp = bigBoss.hp - player.attackDamage;
     }
 
-    
     // Permite que o boss ataque o jogador.
     if (player.hp < bigBoss.attackDamage) {
         player.hp = 0;
@@ -189,6 +193,30 @@ contract MyEpicGame is ERC721 {
 
     console.log("Jogador atacou o boss. Boss ficou com HP: %s", bigBoss.hp);
     console.log("Boss atacou o jogador. Jogador ficou com hp: %s\n", player.hp);
+
+    emit AttackComplete(bigBoss.hp, player.hp);
+  }
+
+  function checkIfUserHasNFT() public view returns (CharacterAttributes memory) {
+    // Pega o tokenId do personagem NFT do usuario
+    uint256 userNftTokenId = nftHolders[msg.sender];
+    // Se o usuario tiver um tokenId no map, retorne seu personagem
+    if (userNftTokenId > 0) {
+        return nftHolderAttributes[userNftTokenId];
+    }
+    // Senão, retorne um personagem vazio
+    else {
+        CharacterAttributes memory emptyStruct;
+        return emptyStruct;
+    }
+  }
+
+  function getAllDefaultCharacters() public view returns (CharacterAttributes[] memory) {
+    return defaultCharacters;
+  }
+
+  function getBigBoss() public view returns (BigBoss memory) {
+    return bigBoss;
   }
 
 
