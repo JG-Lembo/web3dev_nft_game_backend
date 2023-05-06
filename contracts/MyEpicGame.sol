@@ -57,7 +57,7 @@ contract MyEpicGame is ERC721 {
   BigBoss public bigBoss; 
 
   event CharacterNFTMinted(address sender, uint256 tokenId, uint256 characterIndex);
-  event AttackComplete(uint newBossHp, uint newPlayerHp);
+  event AttackComplete(uint newBossHp, uint newPlayerHp, uint damageDealt);
 
   constructor(
     string[] memory characterNames,
@@ -167,6 +167,13 @@ contract MyEpicGame is ERC721 {
     return output;
   }
 
+  function getAttackDamage (CharacterAttributes memory player, address sender) public view returns (uint256) {
+    uint256 critChance = uint256(keccak256(abi.encodePacked(player.attackDamage, player.hp, sender, bigBoss.hp, _tokenIds.current())));
+    critChance = critChance % 100;
+    if (critChance < 10) return player.attackDamage * 2;
+    return player.attackDamage;
+  }
+
   function attackBoss() public {
     // Pega o estado da NFT do jogador.
     uint256 nftTokenIdOfPlayer = nftHolders[msg.sender];
@@ -187,13 +194,15 @@ contract MyEpicGame is ERC721 {
         "Erro: Boss deve ter HP para atacar."
     );
 
+    uint256 attackDamage = getAttackDamage(player, msg.sender);
+
     // Permite que o jogador ataque o boss.
-    if (bigBoss.hp < player.attackDamage) {
+    if (bigBoss.hp < attackDamage) {
         damageDealt[msg.sender] = damageDealt[msg.sender] + bigBoss.hp;
         bigBoss.hp = 0;
     } else {
-        bigBoss.hp = bigBoss.hp - player.attackDamage;
-        damageDealt[msg.sender] = damageDealt[msg.sender] + player.attackDamage;
+        bigBoss.hp = bigBoss.hp - attackDamage;
+        damageDealt[msg.sender] = damageDealt[msg.sender] + attackDamage;
     }
 
     // Permite que o boss ataque o jogador.
@@ -206,7 +215,7 @@ contract MyEpicGame is ERC721 {
     console.log("Jogador atacou o boss. Boss ficou com HP: %s", bigBoss.hp);
     console.log("Boss atacou o jogador. Jogador ficou com hp: %s\n", player.hp);
 
-    emit AttackComplete(bigBoss.hp, player.hp);
+    emit AttackComplete(bigBoss.hp, player.hp, attackDamage);
   }
 
   function checkIfUserHasNFT() public view returns (CharacterAttributes memory) {
