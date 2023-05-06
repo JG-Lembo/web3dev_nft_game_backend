@@ -25,6 +25,13 @@ contract MyEpicGame is ERC721 {
     uint attackDamage;
   }
 
+  struct PlayerCharacters {
+    address holderAddress;
+    uint256 tokenId;
+    string imageURI;
+    uint256 damageDealt;
+  }
+
   // O tokenId eh o identificador unico das NFTs, eh um numero
   // que vai incrementando, como 0, 1, 2, 3, etc.
 
@@ -35,6 +42,9 @@ contract MyEpicGame is ERC721 {
 
   // Criamos um mapping do tokenId => atributos das NFTs.
   mapping(uint256 => CharacterAttributes) public nftHolderAttributes;
+  mapping(address => uint256) public nftHolders;
+  mapping(address => uint256) public damageDealt;
+  address[] holderAddresses;
 
   struct BigBoss {
     string name;
@@ -44,12 +54,7 @@ contract MyEpicGame is ERC721 {
     uint attackDamage;
   }
 
-  BigBoss public bigBoss;
-
-  // Um mapping de um endereco => tokenId das NFTs, nos da um
-  // jeito facil de armazenar o dono da NFT e referenciar ele
-  // depois.
-  mapping(address => uint256) public nftHolders;
+  BigBoss public bigBoss; 
 
   event CharacterNFTMinted(address sender, uint256 tokenId, uint256 characterIndex);
   event AttackComplete(uint newBossHp, uint newPlayerHp);
@@ -123,6 +128,7 @@ contract MyEpicGame is ERC721 {
 
     // Mantem um jeito facil de ver quem possui a NFT
     nftHolders[msg.sender] = newItemId;
+    holderAddresses.push(msg.sender);
 
     // Incrementa o tokenId para a proxima pessoa que usar.
     _tokenIds.increment();
@@ -183,9 +189,11 @@ contract MyEpicGame is ERC721 {
 
     // Permite que o jogador ataque o boss.
     if (bigBoss.hp < player.attackDamage) {
+        damageDealt[msg.sender] = damageDealt[msg.sender] + bigBoss.hp;
         bigBoss.hp = 0;
     } else {
         bigBoss.hp = bigBoss.hp - player.attackDamage;
+        damageDealt[msg.sender] = damageDealt[msg.sender] + player.attackDamage;
     }
 
     // Permite que o boss ataque o jogador.
@@ -221,6 +229,21 @@ contract MyEpicGame is ERC721 {
 
   function getBigBoss() public view returns (BigBoss memory) {
     return bigBoss;
+  }
+
+  function getAllPlayers() public view returns (PlayerCharacters[] memory) {
+    PlayerCharacters[] memory characters =  new PlayerCharacters[](holderAddresses.length);
+    for (uint i = 0; i < holderAddresses.length; i++) {
+      address holderAddress = holderAddresses[i];
+      uint256 holderTokenId = nftHolders[holderAddress];
+      characters[i] = PlayerCharacters({
+        holderAddress: holderAddress,
+        tokenId: holderTokenId,
+        imageURI: nftHolderAttributes[holderTokenId].imageURI,
+        damageDealt: damageDealt[holderAddress]
+      });
+    }
+    return characters;
   }
 
 

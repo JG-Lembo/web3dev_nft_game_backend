@@ -31,6 +31,9 @@ const main = async () => {
     // Pega o valor da URI da NFT
     let returnedTokenUri = await gameContract.tokenURI(1);
     console.log("Token URI:", returnedTokenUri);
+
+    let allPlayers = await gameContract.getAllPlayers();
+    console.log("All players:", allPlayers[0].imageURI);
 };
   
 const runMain = async () => {
