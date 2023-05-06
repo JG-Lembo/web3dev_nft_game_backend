@@ -20,6 +20,7 @@ contract MyEpicGame is ERC721 {
     uint characterIndex;
     string name;
     string imageURI;
+    string mainColor;
     uint hp;
     uint maxHp;
     uint attackDamage;
@@ -49,6 +50,7 @@ contract MyEpicGame is ERC721 {
   struct BigBoss {
     string name;
     string imageURI;
+    string mainColor;
     uint hp;
     uint maxHp;
     uint attackDamage;
@@ -62,10 +64,12 @@ contract MyEpicGame is ERC721 {
   constructor(
     string[] memory characterNames,
     string[] memory characterImageURIs,
+    string[] memory characterMainColor,
     uint[] memory characterHp,
     uint[] memory characterAttackDmg,
     string memory bossName, // Essas novas variáveis serão passadas via run.js ou deploy.js
     string memory bossImageURI,
+    string memory bossMainColor,
     uint bossHp,
     uint bossAttackDamage
   )
@@ -77,7 +81,8 @@ contract MyEpicGame is ERC721 {
       imageURI: bossImageURI,
       hp: bossHp,
       maxHp: bossHp,
-      attackDamage: bossAttackDamage
+      attackDamage: bossAttackDamage,
+      mainColor: bossMainColor
     });
 
     console.log("Boss inicializado com sucesso %s com HP %s, img %s", bigBoss.name, bigBoss.hp, bigBoss.imageURI);
@@ -87,6 +92,7 @@ contract MyEpicGame is ERC721 {
         characterIndex: i,
         name: characterNames[i],
         imageURI: characterImageURIs[i],
+        mainColor: characterMainColor[i],
         hp: characterHp[i],
         maxHp: characterHp[i],
         attackDamage: characterAttackDmg[i]
@@ -119,6 +125,7 @@ contract MyEpicGame is ERC721 {
       characterIndex: _characterIndex,
       name: defaultCharacters[_characterIndex].name,
       imageURI: defaultCharacters[_characterIndex].imageURI,
+      mainColor: defaultCharacters[_characterIndex].mainColor,
       hp: defaultCharacters[_characterIndex].hp,
       maxHp: defaultCharacters[_characterIndex].maxHp,
       attackDamage: defaultCharacters[_characterIndex].attackDamage
