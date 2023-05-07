@@ -43,6 +43,7 @@ contract MyEpicGame is ERC721 {
 
   // Criamos um mapping do tokenId => atributos das NFTs.
   mapping(uint256 => CharacterAttributes) public nftHolderAttributes;
+  mapping(uint256 => uint256) public lastDefeatedAt;
   mapping(address => uint256) public nftHolders;
   mapping(address => uint256) public damageDealt;
   address[] holderAddresses;
@@ -60,6 +61,8 @@ contract MyEpicGame is ERC721 {
 
   event CharacterNFTMinted(address sender, uint256 tokenId, uint256 characterIndex);
   event AttackComplete(uint newBossHp, uint newPlayerHp, uint damageDealt);
+  event HealingFailed(uint timeLeft);
+  event HealingSuccess();
 
   constructor(
     string[] memory characterNames,
@@ -175,7 +178,7 @@ contract MyEpicGame is ERC721 {
   }
 
   function getAttackDamage (CharacterAttributes memory player, address sender) public view returns (uint256) {
-    uint256 critChance = uint256(keccak256(abi.encodePacked(player.attackDamage, player.hp, sender, bigBoss.hp, _tokenIds.current())));
+    uint256 critChance = uint256(keccak256(abi.encodePacked(player.attackDamage, player.hp, sender, bigBoss.hp, _tokenIds.current(), block.timestamp)));
     critChance = critChance % 100;
     if (critChance < 10) return player.attackDamage * 2;
     return player.attackDamage;
@@ -213,8 +216,9 @@ contract MyEpicGame is ERC721 {
     }
 
     // Permite que o boss ataque o jogador.
-    if (player.hp < bigBoss.attackDamage) {
+    if (player.hp <= bigBoss.attackDamage) {
         player.hp = 0;
+        lastDefeatedAt[nftTokenIdOfPlayer] = block.timestamp;
     } else {
         player.hp = player.hp - bigBoss.attackDamage;
     }
@@ -237,6 +241,25 @@ contract MyEpicGame is ERC721 {
         CharacterAttributes memory emptyStruct;
         return emptyStruct;
     }
+  }
+
+  function getTimeSinceDefeat() public view returns (uint256) {
+    return block.timestamp - lastDefeatedAt[nftHolders[msg.sender]];
+  }
+
+  function healCharacter() public {
+    uint256 playerTokenId = nftHolders[msg.sender];
+
+    // Número de horas para poder curar = 8;
+    uint256 timePassed= getTimeSinceDefeat();
+    if (timePassed < 28800) {
+      emit HealingFailed(28800 - timePassed);
+      revert("Nao se passaram as 8 horas necessarias");
+    }
+
+    CharacterAttributes storage playerCharacter = nftHolderAttributes[playerTokenId];
+    playerCharacter.hp = playerCharacter.maxHp;
+    emit HealingSuccess();
   }
 
   function getAllDefaultCharacters() public view returns (CharacterAttributes[] memory) {

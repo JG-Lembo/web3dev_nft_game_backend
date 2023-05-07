@@ -21,7 +21,7 @@ const main = async () => {
 
     // Só temos três personagens.
     // Uma NFT com personagem no index 2 da nossa array.
-    txn = await gameContract.mintCharacterNFT(2);
+    txn = await gameContract.mintCharacterNFT(0);
     await txn.wait();
 
     txn = await gameContract.attackBoss();
@@ -29,6 +29,9 @@ const main = async () => {
 
     txn = await gameContract.attackBoss();
     await txn.wait();
+
+    let timePassed = await gameContract.getTimeSinceDefeat();
+    console.log(timePassed);
 
     // Pega o valor da URI da NFT
     let returnedTokenUri = await gameContract.tokenURI(1);
