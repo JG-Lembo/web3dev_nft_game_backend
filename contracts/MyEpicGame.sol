@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.4;
+pragma solidity ^0.8.19;
 
-// Contrato NFT para herdar.
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 
-// Funcoes de ajuda que o OpenZeppelin providencia.
 import "@openzeppelin/contracts/utils/Counters.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 
@@ -12,8 +10,6 @@ import "./libraries/Base64.sol";
 
 import "hardhat/console.sol";
 
-// Nosso contrato herda do ERC721, que eh o contrato padrao de
-// NFT!
 contract MyEpicGame is ERC721 {
 
   struct CharacterAttributes {
@@ -33,15 +29,11 @@ contract MyEpicGame is ERC721 {
     uint256 damageDealt;
   }
 
-  // O tokenId eh o identificador unico das NFTs, eh um numero
-  // que vai incrementando, como 0, 1, 2, 3, etc.
-
   using Counters for Counters.Counter;
   Counters.Counter private _tokenIds;
 
   CharacterAttributes[] defaultCharacters;
 
-  // Criamos um mapping do tokenId => atributos das NFTs.
   mapping(uint256 => CharacterAttributes) public nftHolderAttributes;
   mapping(uint256 => uint256) public lastDefeatedAt;
   mapping(address => uint256) public nftHolders;
@@ -55,12 +47,20 @@ contract MyEpicGame is ERC721 {
     uint hp;
     uint maxHp;
     uint attackDamage;
+    bool isBurnt;
+    uint256 lastBurntAt;
+    bool isFrozen;
+    uint256 lastFrozenAt;
   }
 
   BigBoss public bigBoss; 
 
+  bool playersProtected;
+  uint256 playersLastProtectedAt;
+
   event CharacterNFTMinted(address sender, uint256 tokenId, uint256 characterIndex);
   event AttackComplete(uint newBossHp, uint newPlayerHp, uint damageDealt);
+  event SpecialAttackComplete(uint newBossHp, uint damageDealt);
   event HealingFailed(uint timeLeft);
   event HealingSuccess();
 
@@ -70,7 +70,7 @@ contract MyEpicGame is ERC721 {
     string[] memory characterMainColor,
     uint[] memory characterHp,
     uint[] memory characterAttackDmg,
-    string memory bossName, // Essas novas variáveis serão passadas via run.js ou deploy.js
+    string memory bossName,
     string memory bossImageURI,
     string memory bossMainColor,
     uint bossHp,
@@ -78,17 +78,22 @@ contract MyEpicGame is ERC721 {
   )
   ERC721("Heroes", "HERO")
   {
-
+    
     bigBoss = BigBoss({
       name: bossName,
       imageURI: bossImageURI,
       hp: bossHp,
       maxHp: bossHp,
       attackDamage: bossAttackDamage,
-      mainColor: bossMainColor
+      mainColor: bossMainColor,
+      isBurnt: false,
+      lastBurntAt: 0,
+      isFrozen: false,
+      lastFrozenAt: 0
     });
 
-    console.log("Boss inicializado com sucesso %s com HP %s, img %s", bigBoss.name, bigBoss.hp, bigBoss.imageURI);
+    playersProtected = false;
+    playersLastProtectedAt = 0;
 
     for(uint i = 0; i < characterNames.length; i += 1) {
       defaultCharacters.push(CharacterAttributes({
@@ -100,29 +105,15 @@ contract MyEpicGame is ERC721 {
         maxHp: characterHp[i],
         attackDamage: characterAttackDmg[i]
       }));
-
-      CharacterAttributes memory c = defaultCharacters[i];
-
-      // O uso do console.log() do hardhat nos permite 4 parametros em qualquer order dos seguintes tipos: uint, string, bool, address
-
-      console.log("Personagem inicializado: %s com %s de HP, img %s", c.name, c.hp, c.imageURI);
     }
 
-    // Eu incrementei tokenIds aqui para que minha primeira NFT tenha o ID 1.
-    // Mais nisso na aula!
     _tokenIds.increment();
   }
 
-  // Usuarios vao poder usar essa funcao e pegar a NFT baseado no personagem que mandarem!
   function mintCharacterNFT(uint _characterIndex) external {
-    // Pega o tokenId atual (começa em 1 já que incrementamos no constructor).
     uint256 newItemId = _tokenIds.current();
 
-    // A funcao magica! Atribui o tokenID para o endereço da carteira de quem chamou o contrato.
-
     _safeMint(msg.sender, newItemId);
-
-    // Nos mapeamos o tokenId => os atributos dos personagens. Mais disso abaixo
 
     nftHolderAttributes[newItemId] = CharacterAttributes({
       characterIndex: _characterIndex,
@@ -134,13 +125,9 @@ contract MyEpicGame is ERC721 {
       attackDamage: defaultCharacters[_characterIndex].attackDamage
     });
 
-    console.log("Mintou NFT c/ tokenId %s e characterIndex %s", newItemId, _characterIndex);
-
-    // Mantem um jeito facil de ver quem possui a NFT
     nftHolders[msg.sender] = newItemId;
     holderAddresses.push(msg.sender);
 
-    // Incrementa o tokenId para a proxima pessoa que usar.
     _tokenIds.increment();
 
     emit CharacterNFTMinted(msg.sender, newItemId, _characterIndex);
@@ -148,10 +135,6 @@ contract MyEpicGame is ERC721 {
 
   function tokenURI(uint256 _tokenId) public view override returns (string memory) {
     CharacterAttributes memory charAttributes = nftHolderAttributes[_tokenId];
-
-    string memory strHp = Strings.toString(charAttributes.hp);
-    string memory strMaxHp = Strings.toString(charAttributes.maxHp);
-    string memory strAttackDamage = Strings.toString(charAttributes.attackDamage);
 
     string memory json = Base64.encode(
       bytes(
@@ -163,8 +146,8 @@ contract MyEpicGame is ERC721 {
             Strings.toString(_tokenId),
             '", "description": "An epic NFT", "image": "ipfs://',
             charAttributes.imageURI,
-            '", "attributes": [ { "trait_type": "Health Points", "value": ',strHp,', "max_value":',strMaxHp,'}, { "trait_type": "Attack Damage", "value": ',
-            strAttackDamage,'} ]}'
+            '", "attributes": [ { "trait_type": "Health Points", "value": ', Strings.toString(charAttributes.hp),', "max_value":', Strings.toString(charAttributes.maxHp),'}, { "trait_type": "Attack Damage", "value": ',
+            Strings.toString(charAttributes.attackDamage),'} ]}'
           )
         )
       )
@@ -178,65 +161,64 @@ contract MyEpicGame is ERC721 {
   }
 
   function getAttackDamage (CharacterAttributes memory player, address sender) public view returns (uint256) {
-    uint256 critChance = uint256(keccak256(abi.encodePacked(player.attackDamage, player.hp, sender, bigBoss.hp, _tokenIds.current(), block.timestamp)));
-    critChance = critChance % 100;
-    if (critChance < 10) return player.attackDamage * 2;
-    return player.attackDamage;
+    uint256 critChance = uint256(keccak256(abi.encodePacked(player.attackDamage, player.hp, sender, bigBoss.hp, _tokenIds.current(), block.timestamp))) % 100;
+    uint256 damage = player.attackDamage;
+    if (critChance < 10) damage *= 2;
+    damage = applyDamageConditions(damage);
+    return damage;
+  }
+
+  function applyDamageConditions(uint256 damage) public view returns (uint256) {
+    if (bigBoss.isBurnt) damage *= 2;
+    if (bigBoss.isFrozen) damage /= 2;
+    return damage;
   }
 
   function attackBoss() public {
-    // Pega o estado da NFT do jogador.
     uint256 nftTokenIdOfPlayer = nftHolders[msg.sender];
     CharacterAttributes storage player = nftHolderAttributes[nftTokenIdOfPlayer];
 
-    console.log("\nJogador com personagem %s ira atacar. Tem %s de HP e %s de PA", player.name, player.hp, player.attackDamage);
-    console.log("Boss %s tem %s de HP e %s de PA", bigBoss.name, bigBoss.hp, bigBoss.attackDamage);
+    updateConditions();
 
-    // Checa se o hp do jogador é maior que 0.
     require (
-        player.hp > 0,
-        "Erro: Personagem deve ter HP para atacar o boss."
-    );
-
-    // Checa que o hp do boss é maior que 0.
-    require (
-        bigBoss.hp > 0,
-        "Erro: Boss deve ter HP para atacar."
+        player.hp > 0 && bigBoss.hp > 0,
+        "Erro: Personagem e/ou o boss devem ter HP para atacar o boss."
     );
 
     uint256 attackDamage = getAttackDamage(player, msg.sender);
 
-    // Permite que o jogador ataque o boss.
-    if (bigBoss.hp < attackDamage) {
-        damageDealt[msg.sender] = damageDealt[msg.sender] + bigBoss.hp;
-        bigBoss.hp = 0;
-    } else {
-        bigBoss.hp = bigBoss.hp - attackDamage;
-        damageDealt[msg.sender] = damageDealt[msg.sender] + attackDamage;
-    }
+    dealBossDamage(attackDamage, msg.sender);
 
-    // Permite que o boss ataque o jogador.
-    if (player.hp <= bigBoss.attackDamage) {
+    uint bossDamage = bigBoss.attackDamage;
+    if (playersProtected) bossDamage /= 2;
+    uint256 hitChance = uint256(keccak256(abi.encodePacked(bigBoss.hp, msg.sender, player.hp, _tokenIds.current(), block.timestamp))) % 100;
+    if (bigBoss.isFrozen && hitChance >= 10) bossDamage=0;
+
+    if (player.hp <= bossDamage) {
         player.hp = 0;
         lastDefeatedAt[nftTokenIdOfPlayer] = block.timestamp;
     } else {
-        player.hp = player.hp - bigBoss.attackDamage;
+        player.hp = player.hp - bossDamage;
     }
-
-    console.log("Jogador atacou o boss. Boss ficou com HP: %s", bigBoss.hp);
-    console.log("Boss atacou o jogador. Jogador ficou com hp: %s\n", player.hp);
 
     emit AttackComplete(bigBoss.hp, player.hp, attackDamage);
   }
 
+  function dealBossDamage(uint256 damage, address attacker) private {
+    if (bigBoss.hp < damage) {
+        damageDealt[attacker] = damageDealt[attacker] + bigBoss.hp;
+        bigBoss.hp = 0;
+    } else {
+        bigBoss.hp = bigBoss.hp - damage;
+        damageDealt[attacker] = damageDealt[attacker] + damage;
+    }
+  }
+
   function checkIfUserHasNFT() public view returns (CharacterAttributes memory) {
-    // Pega o tokenId do personagem NFT do usuario
     uint256 userNftTokenId = nftHolders[msg.sender];
-    // Se o usuario tiver um tokenId no map, retorne seu personagem
     if (userNftTokenId > 0) {
         return nftHolderAttributes[userNftTokenId];
     }
-    // Senão, retorne um personagem vazio
     else {
         CharacterAttributes memory emptyStruct;
         return emptyStruct;
@@ -250,7 +232,6 @@ contract MyEpicGame is ERC721 {
   function healCharacter() public {
     uint256 playerTokenId = nftHolders[msg.sender];
 
-    // Número de horas para poder curar = 8;
     uint256 timePassed= getTimeSinceDefeat();
     if (timePassed < 28800) {
       emit HealingFailed(28800 - timePassed);
@@ -283,6 +264,80 @@ contract MyEpicGame is ERC721 {
       });
     }
     return characters;
+  }
+
+  function useSpecialAbility() public {
+    uint256 playerTokenId = nftHolders[msg.sender];
+    CharacterAttributes storage character = nftHolderAttributes[playerTokenId];
+    updateConditions();
+    if (keccak256(abi.encodePacked(character.name)) == keccak256(abi.encodePacked("Charizard"))) {
+      useCharizardAbility();
+    }
+    if (keccak256(abi.encodePacked(character.name)) == keccak256(abi.encodePacked("Blastoise"))) {
+      useBlastoiseAbility();
+    }
+    if (keccak256(abi.encodePacked(character.name)) == keccak256(abi.encodePacked("Venusaur"))) {
+      useVenusaurAbility();
+    }
+  }
+
+  function useCharizardAbility() private {
+    uint256 attackDamage = defaultCharacters[0].attackDamage;
+    attackDamage = applyDamageConditions(attackDamage);
+    dealBossDamage(attackDamage, msg.sender);
+    
+    bigBoss.isBurnt = true;
+    bigBoss.lastBurntAt = block.timestamp;
+    emit SpecialAttackComplete(bigBoss.hp, attackDamage);
+  }
+
+  function isBossBurnt() public view returns(bool) {
+    if (block.timestamp - bigBoss.lastBurntAt >= 3600) {
+      return false;
+    }
+    return bigBoss.isBurnt;
+  }
+
+  function useBlastoiseAbility() private {
+
+    uint256 attackDamage = defaultCharacters[1].attackDamage;
+    attackDamage = applyDamageConditions(attackDamage);
+    dealBossDamage(attackDamage, msg.sender);
+    
+    bigBoss.isFrozen = true;
+    bigBoss.lastFrozenAt = block.timestamp;    
+    emit SpecialAttackComplete(bigBoss.hp, attackDamage);
+  }
+
+  function isBossFrozen() public view returns(bool) {
+    if (block.timestamp - bigBoss.lastBurntAt >= 300) {
+      return false;
+    }
+    return bigBoss.isFrozen;
+  }
+
+  function useVenusaurAbility() private {
+    playersProtected = true;
+    playersLastProtectedAt = block.timestamp;
+  }
+
+  function arePlayersProtected() public view returns (bool) {
+    if (block.timestamp - playersLastProtectedAt >= 3600) {
+      return false;
+    }
+    return playersProtected;
+  }
+
+  function updateConditions() private {
+    if (isBossBurnt()) {
+      if (block.timestamp - bigBoss.lastBurntAt >= 3600) bigBoss.isBurnt = false;
+    }
+    if (isBossFrozen()) {
+      if (block.timestamp - bigBoss.lastFrozenAt >= 300) bigBoss.isFrozen = false;
+    }
+    if (arePlayersProtected()) {
+      if (block.timestamp - playersLastProtectedAt >= 3600) playersProtected = false;
+    }
   }
 
 
