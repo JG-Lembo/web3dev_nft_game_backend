@@ -20,6 +20,8 @@ contract MyEpicGame is ERC721 {
     uint hp;
     uint maxHp;
     uint attackDamage;
+    uint lastDefeatedAt;
+    uint lastSpecialAbilityUse;
   }
 
   struct PlayerCharacters {
@@ -35,7 +37,6 @@ contract MyEpicGame is ERC721 {
   CharacterAttributes[] defaultCharacters;
 
   mapping(uint256 => CharacterAttributes) public nftHolderAttributes;
-  mapping(uint256 => uint256) public lastDefeatedAt;
   mapping(address => uint256) public nftHolders;
   mapping(address => uint256) public damageDealt;
   address[] holderAddresses;
@@ -61,8 +62,6 @@ contract MyEpicGame is ERC721 {
   event CharacterNFTMinted(address sender, uint256 tokenId, uint256 characterIndex);
   event AttackComplete(uint newBossHp, uint newPlayerHp, uint damageDealt);
   event SpecialAttackComplete(uint newBossHp, uint damageDealt);
-  event HealingFailed(uint timeLeft);
-  event HealingSuccess();
 
   constructor(
     string[] memory characterNames,
@@ -103,7 +102,9 @@ contract MyEpicGame is ERC721 {
         mainColor: characterMainColor[i],
         hp: characterHp[i],
         maxHp: characterHp[i],
-        attackDamage: characterAttackDmg[i]
+        attackDamage: characterAttackDmg[i],
+        lastDefeatedAt: 0,
+        lastSpecialAbilityUse: 0
       }));
     }
 
@@ -122,7 +123,9 @@ contract MyEpicGame is ERC721 {
       mainColor: defaultCharacters[_characterIndex].mainColor,
       hp: defaultCharacters[_characterIndex].hp,
       maxHp: defaultCharacters[_characterIndex].maxHp,
-      attackDamage: defaultCharacters[_characterIndex].attackDamage
+      attackDamage: defaultCharacters[_characterIndex].attackDamage,
+      lastDefeatedAt: defaultCharacters[_characterIndex].lastDefeatedAt,
+      lastSpecialAbilityUse: defaultCharacters[_characterIndex].lastSpecialAbilityUse
     });
 
     nftHolders[msg.sender] = newItemId;
@@ -160,14 +163,6 @@ contract MyEpicGame is ERC721 {
     return output;
   }
 
-  function getAttackDamage (CharacterAttributes memory player, address sender) public view returns (uint256) {
-    uint256 critChance = uint256(keccak256(abi.encodePacked(player.attackDamage, player.hp, sender, bigBoss.hp, _tokenIds.current(), block.timestamp))) % 100;
-    uint256 damage = player.attackDamage;
-    if (critChance < 10) damage *= 2;
-    damage = applyDamageConditions(damage);
-    return damage;
-  }
-
   function applyDamageConditions(uint256 damage) public view returns (uint256) {
     if (bigBoss.isBurnt) damage *= 2;
     if (bigBoss.isFrozen) damage /= 2;
@@ -185,18 +180,21 @@ contract MyEpicGame is ERC721 {
         "Erro: Personagem e/ou o boss devem ter HP para atacar o boss."
     );
 
-    uint256 attackDamage = getAttackDamage(player, msg.sender);
+    uint256 critChance = uint256(keccak256(abi.encodePacked(player.hp, msg.sender, bigBoss.hp, block.timestamp))) % 100;
+    uint256 attackDamage = player.attackDamage;
+    if (critChance < 10) attackDamage *= 2;
+    attackDamage = applyDamageConditions(attackDamage);
 
     dealBossDamage(attackDamage, msg.sender);
 
     uint bossDamage = bigBoss.attackDamage;
     if (playersProtected) bossDamage /= 2;
-    uint256 hitChance = uint256(keccak256(abi.encodePacked(bigBoss.hp, msg.sender, player.hp, _tokenIds.current(), block.timestamp))) % 100;
+    uint256 hitChance = uint256(keccak256(abi.encodePacked(msg.sender, player.hp, block.timestamp))) % 100;
     if (bigBoss.isFrozen && hitChance >= 10) bossDamage=0;
 
     if (player.hp <= bossDamage) {
         player.hp = 0;
-        lastDefeatedAt[nftTokenIdOfPlayer] = block.timestamp;
+        player.lastDefeatedAt = block.timestamp;
     } else {
         player.hp = player.hp - bossDamage;
     }
@@ -226,21 +224,22 @@ contract MyEpicGame is ERC721 {
   }
 
   function getTimeSinceDefeat() public view returns (uint256) {
-    return block.timestamp - lastDefeatedAt[nftHolders[msg.sender]];
+    return block.timestamp - nftHolderAttributes[nftHolders[msg.sender]].lastDefeatedAt;
   }
 
   function healCharacter() public {
     uint256 playerTokenId = nftHolders[msg.sender];
+    CharacterAttributes storage playerCharacter = nftHolderAttributes[playerTokenId];
+
+    require(playerCharacter.hp == 0,
+      "O personagem deve estar sem vida para ser curado");
 
     uint256 timePassed= getTimeSinceDefeat();
     if (timePassed < 28800) {
-      emit HealingFailed(28800 - timePassed);
       revert("Nao se passaram as 8 horas necessarias");
     }
 
-    CharacterAttributes storage playerCharacter = nftHolderAttributes[playerTokenId];
     playerCharacter.hp = playerCharacter.maxHp;
-    emit HealingSuccess();
   }
 
   function getAllDefaultCharacters() public view returns (CharacterAttributes[] memory) {
@@ -266,29 +265,46 @@ contract MyEpicGame is ERC721 {
     return characters;
   }
 
-  function useSpecialAbility() public {
-    uint256 playerTokenId = nftHolders[msg.sender];
-    CharacterAttributes storage character = nftHolderAttributes[playerTokenId];
-    updateConditions();
-    if (keccak256(abi.encodePacked(character.name)) == keccak256(abi.encodePacked("Charizard"))) {
-      useCharizardAbility();
-    }
-    if (keccak256(abi.encodePacked(character.name)) == keccak256(abi.encodePacked("Blastoise"))) {
-      useBlastoiseAbility();
-    }
-    if (keccak256(abi.encodePacked(character.name)) == keccak256(abi.encodePacked("Venusaur"))) {
-      useVenusaurAbility();
-    }
+  function getTimeSinceSpecialAbilityUse() public view returns (uint) {
+    return block.timestamp - nftHolderAttributes[nftHolders[msg.sender]].lastSpecialAbilityUse;
   }
 
-  function useCharizardAbility() private {
-    uint256 attackDamage = defaultCharacters[0].attackDamage;
-    attackDamage = applyDamageConditions(attackDamage);
-    dealBossDamage(attackDamage, msg.sender);
-    
-    bigBoss.isBurnt = true;
-    bigBoss.lastBurntAt = block.timestamp;
-    emit SpecialAttackComplete(bigBoss.hp, attackDamage);
+  function useSpecialAbility() public {
+
+    uint256 playerTokenId = nftHolders[msg.sender];
+    CharacterAttributes storage character = nftHolderAttributes[playerTokenId];
+
+    require (getTimeSinceSpecialAbilityUse() >= 3600,
+      "Voce ainda nao pode usar sua habilidade especial novamente");
+
+    updateConditions();
+
+    uint256 attackDamage;
+
+    if (keccak256(abi.encodePacked(character.name)) == keccak256(abi.encodePacked("Charizard"))) {
+      attackDamage = defaultCharacters[0].attackDamage;
+      attackDamage = applyDamageConditions(attackDamage);
+      dealBossDamage(attackDamage, msg.sender);
+      
+      bigBoss.isBurnt = true;
+      bigBoss.lastBurntAt = block.timestamp;
+      emit SpecialAttackComplete(bigBoss.hp, attackDamage);
+    }
+    if (keccak256(abi.encodePacked(character.name)) == keccak256(abi.encodePacked("Blastoise"))) {
+      attackDamage = defaultCharacters[1].attackDamage;
+      attackDamage = applyDamageConditions(attackDamage);
+      dealBossDamage(attackDamage, msg.sender);
+      
+      bigBoss.isFrozen = true;
+      bigBoss.lastFrozenAt = block.timestamp;    
+      emit SpecialAttackComplete(bigBoss.hp, attackDamage);
+    }
+    if (keccak256(abi.encodePacked(character.name)) == keccak256(abi.encodePacked("Venusaur"))) {
+      playersProtected = true;
+      playersLastProtectedAt = block.timestamp;
+    }
+
+    character.lastSpecialAbilityUse = block.timestamp;
   }
 
   function isBossBurnt() public view returns(bool) {
@@ -298,27 +314,11 @@ contract MyEpicGame is ERC721 {
     return bigBoss.isBurnt;
   }
 
-  function useBlastoiseAbility() private {
-
-    uint256 attackDamage = defaultCharacters[1].attackDamage;
-    attackDamage = applyDamageConditions(attackDamage);
-    dealBossDamage(attackDamage, msg.sender);
-    
-    bigBoss.isFrozen = true;
-    bigBoss.lastFrozenAt = block.timestamp;    
-    emit SpecialAttackComplete(bigBoss.hp, attackDamage);
-  }
-
   function isBossFrozen() public view returns(bool) {
-    if (block.timestamp - bigBoss.lastBurntAt >= 300) {
+    if (block.timestamp - bigBoss.lastFrozenAt >= 300) {
       return false;
     }
     return bigBoss.isFrozen;
-  }
-
-  function useVenusaurAbility() private {
-    playersProtected = true;
-    playersLastProtectedAt = block.timestamp;
   }
 
   function arePlayersProtected() public view returns (bool) {
