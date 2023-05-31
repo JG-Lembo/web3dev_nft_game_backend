@@ -274,6 +274,9 @@ contract MyEpicGame is ERC721 {
     uint256 playerTokenId = nftHolders[msg.sender];
     CharacterAttributes storage character = nftHolderAttributes[playerTokenId];
 
+    require (character.hp > 0,
+     "Voce nao pode usar sua habilidade especial sem HP.");
+
     require (getTimeSinceSpecialAbilityUse() >= 3600,
       "Voce ainda nao pode usar sua habilidade especial novamente");
 
@@ -307,38 +310,15 @@ contract MyEpicGame is ERC721 {
     character.lastSpecialAbilityUse = block.timestamp;
   }
 
-  function isBossBurnt() public view returns(bool) {
-    if (block.timestamp - bigBoss.lastBurntAt >= 3600) {
-      return false;
-    }
-    return bigBoss.isBurnt;
-  }
-
-  function isBossFrozen() public view returns(bool) {
-    if (block.timestamp - bigBoss.lastFrozenAt >= 300) {
-      return false;
-    }
-    return bigBoss.isFrozen;
-  }
-
-  function arePlayersProtected() public view returns (bool) {
-    if (block.timestamp - playersLastProtectedAt >= 3600) {
-      return false;
-    }
-    return playersProtected;
-  }
-
   function updateConditions() private {
-    if (isBossBurnt()) {
-      if (block.timestamp - bigBoss.lastBurntAt >= 3600) bigBoss.isBurnt = false;
+    if (bigBoss.isBurnt && (block.timestamp - bigBoss.lastBurntAt) >= 3600) {
+      bigBoss.isBurnt = false;
     }
-    if (isBossFrozen()) {
-      if (block.timestamp - bigBoss.lastFrozenAt >= 300) bigBoss.isFrozen = false;
+    if (bigBoss.isFrozen && (block.timestamp - bigBoss.lastFrozenAt) >= 300) {
+      bigBoss.isFrozen = false;
     }
-    if (arePlayersProtected()) {
-      if (block.timestamp - playersLastProtectedAt >= 3600) playersProtected = false;
+    if (playersProtected && (block.timestamp - playersLastProtectedAt) >= 3600) {
+      playersProtected = false;
     }
   }
-
-
 }
