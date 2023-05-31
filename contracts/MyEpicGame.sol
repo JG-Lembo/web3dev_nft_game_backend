@@ -173,12 +173,12 @@ contract MyEpicGame is ERC721 {
     uint256 nftTokenIdOfPlayer = nftHolders[msg.sender];
     CharacterAttributes storage player = nftHolderAttributes[nftTokenIdOfPlayer];
 
-    updateConditions();
-
     require (
         player.hp > 0 && bigBoss.hp > 0,
         "Erro: Personagem e/ou o boss devem ter HP para atacar o boss."
     );
+
+    updateConditions();
 
     uint256 critChance = uint256(keccak256(abi.encodePacked(player.hp, msg.sender, bigBoss.hp, block.timestamp))) % 100;
     uint256 attackDamage = player.attackDamage;
@@ -276,6 +276,9 @@ contract MyEpicGame is ERC721 {
 
     require (character.hp > 0,
      "Voce nao pode usar sua habilidade especial sem HP.");
+
+    require (bigBoss.hp > 0,
+     "Voce nao pode usar sua habilidade se o Boss ja foi derrotado.");
 
     require (getTimeSinceSpecialAbilityUse() >= 3600,
       "Voce ainda nao pode usar sua habilidade especial novamente");
